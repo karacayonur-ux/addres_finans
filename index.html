@@ -1645,7 +1645,36 @@ document.querySelectorAll('input[name="itip"]').forEach(function(r){r.addEventLi
 function updIFL(){var tip=document.querySelector('input[name="itip"]:checked'),tv=tip?tip.value:'DEBIT',dl=document.getElementById('if-firm-dl');if(dl)dl.innerHTML=(firms[tv]||[]).sort().map(function(f){return '<option value="'+f+'">';}).join('');}
 function updIDur(){var tip=document.querySelector('input[name="itip"]:checked'),tv=tip?tip.value:'DEBIT',sel=document.getElementById('if-dur-sel');if(!sel)return;if(tv==='CHECK'){sel.value='BEK';sel.disabled=false;sel.style.opacity='1';}else{sel.value='ALI';sel.disabled=true;sel.style.opacity='.5';}}
 
-function saveInv(){var te=document.querySelector('input[name="itip"]:checked'),tip=te?te.value:'DEBIT',tarih=document.getElementById('if-date').value,tutar=parseFloat(document.getElementById('if-amt').value)||0,firma=document.getElementById('if-firm').value.trim().toUpperCase(),fno=document.getElementById('if-fno').value.trim(),dur=tip==='CHECK'?(document.getElementById('if-dur-sel').value||'BEK'):'ALI',kategori=document.getElementById('if-cat').value,kisi=document.getElementById('if-person').value,aciklama=document.getElementById('if-note').value.trim();if(!tarih||!tutar||!firma){toast('Tarih, Tutar ve Firma zorunlu!',true);return;}if(iEditId){var i=invs.findIndex(function(t){return t.id===iEditId;});if(i>=0)invs[i]={id:iEditId,tip:tip,tarih:tarih,tutar:tutar,firma:firma,fno:fno,dur:dur,kategori:kategori,kisi:kisi,aciklama:aciklama,locked:invs[i].locked||false};toast('Güncellendi');}else{invs.push({id:invNextId++,tip:tip,tarih:tarih,tutar:tutar,firma:firma,fno:fno,dur:dur,kategori:kategori,kisi:kisi,aciklama:aciklama,locked:false});
+function saveInv(){var te=document.querySelector('input[name="itip"]:checked'),tip=te?te.value:'DEBIT',tarih=document.getElementById('if-date').value,tutar=parseFloat(document.getElementById('if-amt').value)||0,firma=document.getElementById('if-firm').value.trim().toUpperCase(),fno=document.getElementById('if-fno').value.trim(),dur=tip==='CHECK'?(document.getElementById('if-dur-sel').value||'BEK'):'ALI',kategori=document.getElementById('if-cat').value,kisi=document.getElementById('if-person').value,aciklama=document.getElementById('if-note').value.trim();if(!tarih||!tutar||!firma){toast('Tarih, Tutar ve Firma zorunlu!',true);return;}
+  // Duplikat kontrol - sadece yeni kayıt eklerken
+  if(!iEditId){
+    // 1. Fatura no tekrarı
+    if(fno){
+      var fnoMatch=invs.find(function(t){return t.fno&&t.fno.trim().toLowerCase()===fno.toLowerCase();});
+      if(fnoMatch){
+        var uyari='⚠️ Bu fatura numarası zaten kayıtlı!\n\n'+
+          'Firma: '+fnoMatch.firma+'\n'+
+          'Tarih: '+fnoMatch.tarih+'\n'+
+          'Tutar: $'+fnoMatch.tutar.toFixed(2)+'\n\n'+
+          'Yine de eklemek istiyor musunuz?';
+        if(!confirm(uyari))return;
+      }
+    }
+    // 2. Tam kopya (firma + tarih + tutar + tip)
+    var kopya=invs.find(function(t){
+      return t.firma===firma&&t.tarih===tarih&&t.tutar===tutar&&t.tip===tip;
+    });
+    if(kopya){
+      var uyari2='⚠️ Aynı kayıt zaten mevcut!\n\n'+
+        'Firma: '+kopya.firma+'\n'+
+        'Tarih: '+kopya.tarih+'\n'+
+        'Tutar: $'+kopya.tutar.toFixed(2)+'\n'+
+        'Tip: '+kopya.tip+'\n\n'+
+        'Yine de eklemek istiyor musunuz?';
+      if(!confirm(uyari2))return;
+    }
+  }
+  if(iEditId){var i=invs.findIndex(function(t){return t.id===iEditId;});if(i>=0)invs[i]={id:iEditId,tip:tip,tarih:tarih,tutar:tutar,firma:firma,fno:fno,dur:dur,kategori:kategori,kisi:kisi,aciklama:aciklama,locked:invs[i].locked||false};toast('Güncellendi');}else{invs.push({id:invNextId++,tip:tip,tarih:tarih,tutar:tutar,firma:firma,fno:fno,dur:dur,kategori:kategori,kisi:kisi,aciklama:aciklama,locked:false});
     if(!firms[tip])firms[tip]=[];if(!firms[tip].includes(firma)){firms[tip].push(firma);firms[tip].sort();}
     toast('Eklendi: '+firma);}doSave();closeInvModal();renderInv();renderDash();renderData();}
 
