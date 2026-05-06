@@ -1063,7 +1063,7 @@ mark{background:rgba(200,168,75,.2);color:var(--gold);border-radius:2px;padding:
     </div>
   </div>
   <div class="frow2">
-    <div class="frow"><label class="flbl">Tarih <button onclick="$('if-date').value=new Date().toISOString().split('T')[0]" style="background:var(--gold-dim);color:var(--gold);border:none;border-radius:4px;padding:1px 6px;font-size:9px;cursor:pointer;margin-left:4px">Bugün</button></label><input type="date" class="finp" id="if-date" data-has-listeners="true"></div>
+    <div class="frow"><label class="flbl">Tarih <button onclick="$('if-date').value=todayET()" style="background:var(--gold-dim);color:var(--gold);border:none;border-radius:4px;padding:1px 6px;font-size:9px;cursor:pointer;margin-left:4px">Bugün</button></label><input type="date" class="finp" id="if-date" data-has-listeners="true"></div>
     <div class="frow"><label class="flbl">Fatura No</label><input type="text" class="finp" id="if-fno" placeholder="INV-001" data-has-listeners="true"></div>
   </div>
   <div class="frow"><label class="flbl">Firma / Kalem</label><input type="text" class="finp" id="if-firm" placeholder="Firma adı..." list="if-firm-dl" autocomplete="off" data-has-listeners="true"><datalist id="if-firm-dl"><option value="ARP ENVIROMENTAL SOLUTIONS LLC"></option><option value="DEMSEY"></option><option value="DOLCISSIMO DESSERT"></option><option value="DOMINICK CHIRICHILLO WINES LLC"></option><option value="ESPRESSO MIO"></option><option value="EVERCOOL LLC"></option><option value="FARM A-YARD"></option><option value="H&amp;Z FRUITS&amp; VEGETABLES"></option><option value="IB MECHANIC(WILLIAM)"></option><option value="KONTOS FOOD"></option><option value="LOUMIDIS FOODS INC"></option><option value="MARX FOODSERVICE"></option><option value="MODA FOODS"></option><option value="MS GRINDING SERVICE"></option><option value="NOAHS ARK"></option><option value="OCEAN SEA FOOD DEPOT"></option><option value="ROBIN HOOD CLEANING"></option><option value="ROYAL MARBLE GRANITE"></option><option value="SILK CITY FIRE(YANGIN TUPU KONTROL)"></option><option value="STATE OF NEW JERSEY (GROSS TAX)"></option><option value="SYSCO"></option><option value="TOWN OF MORRISTOWN(OUTSİDE PERMIT)"></option><option value="TYPHOON REMODLING LLC"></option><option value="VERDE HARVEST"></option><option value="VIP RESTAURANT SUPPLIES"></option></datalist></div>
@@ -1338,7 +1338,7 @@ document.querySelectorAll('input[name="tip"]').forEach(r=>r.addEventListener('ch
 
 function openModal(id=null){
   editId=id;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayET();
   if(id){
     const x=txs.find(t=>t.id===id);
     $('modal-ttl').textContent='İşlemi Düzenle';
@@ -1636,7 +1636,7 @@ function connectBinId(){var id=prompt("Bin ID girin:");if(id&&id.trim()){localSt
 
 function populateInvAy(){var sel=document.getElementById('if-ay');if(!sel||sel.options.length>1)return;['OCA','SUB','MAR','NIS','MAY','HAZ','TEM','AGU','EYL','EKI','KAS','ARA'].forEach(function(m,i){var o=document.createElement('option');o.value=i;o.textContent=m;sel.appendChild(o);});}
 
-function openInvModal(id){iEditId=id||null;var today=new Date().toISOString().split('T')[0];document.getElementById('inv-modal-ttl').textContent=id?'Düzenle':'Yeni Fatura Ekle';if(id){var x=invs.find(function(t){return t.id===id;});if(!x)return;var r=document.querySelector('input[name="itip"][value="'+x.tip+'"]');if(r)r.checked=true;document.getElementById('if-date').value=x.tarih;document.getElementById('if-fno').value=x.fno||'';document.getElementById('if-firm').value=x.firma;document.getElementById('if-amt').value=x.tutar;document.getElementById('if-dur-sel').value=x.dur||'BEK';document.getElementById('if-cat').value=x.kategori||'';document.getElementById('if-person').value=x.kisi||'ISLETME';document.getElementById('if-note').value=x.aciklama||'';}else{var r2=document.querySelector('#it-debit');if(r2)r2.checked=true;document.getElementById('if-date').value=today;document.getElementById('if-fno').value='';document.getElementById('if-firm').value='';document.getElementById('if-amt').value='';document.getElementById('if-dur-sel').value='BEK';document.getElementById('if-cat').value='';document.getElementById('if-person').value='ISLETME';document.getElementById('if-note').value='';}updIFL();updIDur();document.getElementById('inv-modal-bg').classList.add('on');}
+function openInvModal(id){iEditId=id||null;var today=todayET();document.getElementById('inv-modal-ttl').textContent=id?'Düzenle':'Yeni Fatura Ekle';if(id){var x=invs.find(function(t){return t.id===id;});if(!x)return;var r=document.querySelector('input[name="itip"][value="'+x.tip+'"]');if(r)r.checked=true;document.getElementById('if-date').value=x.tarih;document.getElementById('if-fno').value=x.fno||'';document.getElementById('if-firm').value=x.firma;document.getElementById('if-amt').value=x.tutar;document.getElementById('if-dur-sel').value=x.dur||'BEK';document.getElementById('if-cat').value=x.kategori||'';document.getElementById('if-person').value=x.kisi||'ISLETME';document.getElementById('if-note').value=x.aciklama||'';}else{var r2=document.querySelector('#it-debit');if(r2)r2.checked=true;document.getElementById('if-date').value=today;document.getElementById('if-fno').value='';document.getElementById('if-firm').value='';document.getElementById('if-amt').value='';document.getElementById('if-dur-sel').value='BEK';document.getElementById('if-cat').value='';document.getElementById('if-person').value='ISLETME';document.getElementById('if-note').value='';}updIFL();updIDur();document.getElementById('inv-modal-bg').classList.add('on');}
 function closeInvModal(){document.getElementById('inv-modal-bg').classList.remove('on');iEditId=null;}
 function invBgClose(e){if(e.target.id==='inv-modal-bg')closeInvModal();}
 document.querySelectorAll('input[name="itip"]').forEach(function(r){r.addEventListener('change',function(){updIFL();updIDur();});});
@@ -1744,7 +1744,7 @@ function saveToFile(){
   var blob = new Blob([src], {type:'text/html;charset=utf-8'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'the_address_master_'+new Date().toISOString().split('T')[0]+'.html';
+  a.download = 'the_address_master_'+todayET()+'.html';
   a.click();
   URL.revokeObjectURL(a.href);
   toast('Dosya kaydedildi — indirilenler klasörüne bakın');
@@ -1761,6 +1761,18 @@ var PAYMENT_METHODS={"PELİN KARADEMİR":"cash","MEHMET EMIN TUNCER":"check","RU
 
 
 // ═══ SUPABASE SYNC ════════════════════════════════════════
+// Tarih yardımcısı - Amerika Eastern Time (UTC-5/UTC-4)
+function todayET(){
+  var now=new Date();
+  // Eastern Time offset: -5 (EST) veya -4 (EDT yaz saati)
+  var etOffset=-5;
+  var month=now.getUTCMonth();
+  // Mart 2. Pazar - Kasım 1. Pazar arası yaz saati
+  var isDST=(month>2&&month<10)||(month===2&&now.getUTCDate()>7)||(month===10&&now.getUTCDate()<7);
+  if(isDST)etOffset=-4;
+  var et=new Date(now.getTime()+etOffset*3600*1000);
+  return et.toISOString().split('T')[0];
+}
 var SB_URL='https://vrhdffofmrvjubuogweo.supabase.co';
 var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaGRmZm9mbXJ2anVidW9nd2VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMjg5NDAsImV4cCI6MjA5MjkwNDk0MH0.kOtls2udJFFTlm2NI6zULwocCpxJlQE6eaK8wlZ3bHU';
 var saveTimer=null;
@@ -1794,7 +1806,7 @@ async function saveToSupabase(){
       if(!r.ok)throw new Error(await r.text());
       await new Promise(function(r){setTimeout(r,100);});
     }
-    setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('tr-TR'));
+    setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'}));
   }catch(e){setSS('error',e.message);}
 }
 
