@@ -1783,16 +1783,30 @@ async function saveToSupabase(){
   setSS('syncing');
   try{
     var normalized=invs.map(function(e){return {id:e.id||0,tip:e.tip||'DEBIT',tarih:e.tarih||'2026-01-01',tutar:parseFloat(e.tutar)||0,firma:(e.firma||'').toString(),fno:(e.fno||'').toString(),dur:e.dur||'BEK',kategori:(e.kategori||'').toString(),kisi:(e.kisi||'ISLETME').toString(),aciklama:(e.aciklama||'').toString(),locked:e.locked===true};});
-    // Önce sil
-    var delRes=await sbReq('faturalar?id=gte.0',{method:'DELETE',prefer:''});
-    // Sil başarılı ya da değil - upsert ile yaz (çakışma olmaz)
-    for(var i=0;i<normalized.length;i+=100){
-      var r=await fetch(SB_URL+'/rest/v1/faturalar',{
-        method:'POST',
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify(normalized.slice(i,i+100))
-      });
+    // Mevcut Supabase ID'lerini çek
+    var existRes=await sbReq('faturalar?select=id&limit=10000',{method:'GET',prefer:''});
+    var existIds=new Set();
+    if(existRes.ok){var ed=await existRes.json();ed.forEach(function(r){existIds.add(r.id);});}
+    // Supabase'de olmayan kayıtları ekle (INSERT)
+    var toInsert=normalized.filter(function(r){return !existIds.has(r.id);});
+    // Supabase'de olan kayıtları güncelle (UPDATE - tek tek)
+    var toUpdate=normalized.filter(function(r){return existIds.has(r.id);});
+    // INSERT - 100'lük batch
+    for(var i=0;i<toInsert.length;i+=100){
+      var r=await sbReq('faturalar',{method:'POST',prefer:'return=minimal',body:JSON.stringify(toInsert.slice(i,i+100))});
       if(!r.ok)throw new Error(await r.text());
+    }
+    // UPDATE - 100'lük batch (upsert)
+    for(var i=0;i<toUpdate.length;i+=100){
+      var r=await fetch(SB_URL+'/rest/v1/faturalar',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(toUpdate.slice(i,i+100))});
+      if(!r.ok)throw new Error(await r.text());
+    }
+    // Supabase'de olup bizde olmayan kayıtları sil
+    var ourIds=new Set(normalized.map(function(r){return r.id;}));
+    var toDelete=[...existIds].filter(function(id){return !ourIds.has(id);});
+    for(var i=0;i<toDelete.length;i+=100){
+      var ids=toDelete.slice(i,i+100).join(',');
+      await sbReq('faturalar?id=in.('+ids+')',{method:'DELETE',prefer:''});
     }
     setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('tr-TR'));
   }catch(e){setSS('error',e.message);}
