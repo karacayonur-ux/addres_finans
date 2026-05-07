@@ -1547,7 +1547,7 @@ MN.forEach((m,i)=>{const o=document.createElement('option');o.value=i;o.textCont
 var invs=[],invNextId=3000,iSortK='tarih',iSortAsc=false,iEditId=null;
 var JKEY='$2a$10$s8BEyLXGqsvg7I9.q0E5mO3bo36dkJ7IOB5DRnM5j8H7Cb.4aS8mW',JBASE='https://api.jsonbin.io/v3/b';
 
-function setSS(s,msg){var ic={idle:'⚪',syncing:'🔄',ok:'🟢',error:'🟡'},lb={idle:'Hazir',syncing:'Kaydediliyor...',ok:'Kaydedildi',error:'Yerel kayit aktif (bulut bekliyor)'};var el=document.getElementById('sync-indicator');if(!el)return;el.textContent=(ic[s]||'⚪')+' '+(msg||lb[s]||s);el.style.color={idle:'var(--text2)',syncing:'var(--gold)',ok:'var(--check)',error:'var(--gold)'}[s]||'var(--text2)';}
+
 
 async function cSave(d){
   // Önce localStorage'a kaydet (her zaman çalışır)
@@ -1572,64 +1572,68 @@ async function cSave(d){
 async function cLoad(){try{var bid=localStorage.getItem('jbin_id');if(!bid)return null;var r=await fetch(JBASE+'/'+bid+'/latest',{headers:{'X-Master-Key':JKEY}});if(!r.ok)return null;var j=await r.json();return j.record||null;}catch(e){return null;}}
 
 function doSave(){
-  // localStorage'a yaz (kritik — her zaman çalışır)
+  // localStorage'a yaz (her zaman, anında)
   try{
-    localStorage.setItem('inv_data', JSON.stringify(invs));
-    localStorage.setItem('inv_nid', String(invNextId));
-    localStorage.setItem('firms26', JSON.stringify(firms));
-  }catch(e){
-    // localStorage erişilemiyorsa kullanıcıya uyar
-    toast('Uyari: Yerel kayit calismadi — Kaydet butonunu kullanin!', true);
-  }
-  // Buluta gönder (arka planda, hata olsa da devam et)
-  cSave({invs:invs,firms:firms,nextId:invNextId,ts:Date.now()}).catch(function(){});
-  setSS('ok','Kaydedildi');
+    localStorage.setItem('inv_data',JSON.stringify(invs));
+    localStorage.setItem('inv_nid',String(invNextId));
+    localStorage.setItem('firms26',JSON.stringify(firms));
+    setSS('ok','Kaydedildi');
+  }catch(e){setSS('error','Kayit hatasi');}
+  // Supabase'e arka planda gönder (başarısız olsa da sorun yok)
+  if(saveTimer)clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){saveToSupabase().catch(function(){});},1500);
 }
 
 async function initInvs(){
+
+  async function initInvs_inner(){
   setSS('idle','Yukleniyor...');
+  firms=JSON.parse(JSON.stringify(DEFAULT_FIRMS));
   
-  // 1. DEFAULT_INV her zaman en güncel — dosya kaydedilince içine gömülüyor
-  invs = DEFAULT_INV.slice();
-  invNextId = DEFAULT_INV.length + 2001;
-  
-  // 2. localStorage'da daha yeni veri var mı?
+  // 1. ÖNCE localStorage (her zaman çalışır, masaüstünden de)
   try{
-    var loc = localStorage.getItem('inv_data');
+    var loc=localStorage.getItem('inv_data');
     if(loc){
-      var localInvs = JSON.parse(loc);
-      // Daha fazla kayıt varsa localStorage'ı kullan
-      if(localInvs.length > invs.length){
-        invs = localInvs;
-        var nid = localStorage.getItem('inv_nid');
-        if(nid) invNextId = parseInt(nid)||3000;
-        setSS('ok', invs.length+' kayit (yerel)');
+      var localInvs=JSON.parse(loc);
+      if(localInvs&&localInvs.length>0){
+        invs=localInvs;
+        var nid=localStorage.getItem('inv_nid');
+        invNextId=nid?parseInt(nid):Math.max.apply(null,localInvs.map(function(x){return x.id||0;}))+1;
+        setSS('ok',invs.length+' kayit (yerel)');
         renderDash();
-        // Buluta da gönder
-        cSave({invs:invs,firms:firms,nextId:invNextId,ts:Date.now()}).catch(function(){});
+        // Arka planda Supabase ile senkronize et
+        sbSync().catch(function(){});
+        return;
+      }
+    }
+  }catch(e){}
+
+  // 2. localStorage boşsa Supabase'den yükle
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/faturalar?order=tarih.desc&limit=10000',{
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    if(r.ok){
+      var sbData=await r.json();
+      if(sbData&&sbData.length>0){
+        invs=sbData;
+        invNextId=Math.max.apply(null,sbData.map(function(x){return x.id||0;}))+1;
+        try{localStorage.setItem('inv_data',JSON.stringify(invs));localStorage.setItem('inv_nid',String(invNextId));}catch(e){}
+        setSS('ok',invs.length+' kayit (Supabase)');
+        renderDash();
         return;
       }
     }
   }catch(e){}
   
-  // 3. Buluttan dene
-  try{
-    var cloud = await cLoad();
-    if(cloud && cloud.invs && cloud.invs.length > invs.length){
-      invs = cloud.invs;
-      if(cloud.firms) firms = cloud.firms;
-      if(cloud.nextId) invNextId = cloud.nextId;
-      try{localStorage.setItem('inv_data',JSON.stringify(invs));localStorage.setItem('inv_nid',String(invNextId));}catch(e){}
-      setSS('ok', invs.length+' kayit (bulut)');
-      renderDash();
-      return;
-    }
-  }catch(e){}
-  
-  // 4. DEFAULT_INV kullan
+  // 3. Son çare: DEFAULT_INV
+  invs=DEFAULT_INV.slice();
+  invNextId=DEFAULT_INV.length+1;
   try{localStorage.setItem('inv_data',JSON.stringify(invs));localStorage.setItem('inv_nid',String(invNextId));}catch(e){}
-  setSS('ok', invs.length+' kayit (varsayilan)');
+  setSS('ok',invs.length+' kayit (varsayilan)');
   renderDash();
+  } // initInvs_inner sonu
+  await initInvs_inner();
 }
 
 function showBinId(){var id=localStorage.getItem('jbin_id');if(id){navigator.clipboard.writeText(id).then(function(){toast('ID kopyalandı: '+id);}).catch(function(){toast('Bin ID: '+id);});}else{toast('Bekleyin, kaydediliyor...',true);}}
@@ -1647,43 +1651,29 @@ function updIDur(){var tip=document.querySelector('input[name="itip"]:checked'),
 function saveInv(){var te=document.querySelector('input[name="itip"]:checked'),tip=te?te.value:'DEBIT',tarih=document.getElementById('if-date').value,tutar=parseFloat(document.getElementById('if-amt').value)||0,firma=document.getElementById('if-firm').value.trim().toUpperCase(),fno=document.getElementById('if-fno').value.trim(),dur=tip==='CHECK'?(document.getElementById('if-dur-sel').value||'BEK'):'ALI',kategori=document.getElementById('if-cat').value,kisi=document.getElementById('if-person').value,aciklama=document.getElementById('if-note').value.trim();if(!tarih||!tutar||!firma){toast('Tarih, Tutar ve Firma zorunlu!',true);return;}
   // Duplikat kontrol - sadece yeni kayıt eklerken
   if(!iEditId){
-    // 1. Fatura no tekrarı (farklı firmada bile)
-    if(fno){
-      var fnoMatch=invs.find(function(t){return t.fno&&t.fno.trim().toLowerCase()===fno.toLowerCase();});
-      if(fnoMatch){
-        var uyari='⚠️ Bu fatura numarası zaten kayıtlı!\n\n'+
-          'Firma: '+fnoMatch.firma+'\n'+
-          'Tarih: '+fnoMatch.tarih+'\n'+
-          'Tutar: $'+fnoMatch.tutar.toFixed(2)+'\n\n'+
-          'Yine de eklemek istiyor musunuz?';
-        if(!confirm(uyari))return;
-      }
-    }
-    // 2. Aynı firma + aynı tutar (tarih farklı bile olsa)
-    var tutarMatch=invs.find(function(t){
-      return t.firma===firma&&Math.abs(t.tutar-tutar)<0.01&&t.tip===tip;
-    });
-    if(tutarMatch){
-      var uyari3='⚠️ Bu firmaya aynı tutarda ödeme var!\n\n'+
-        'Firma: '+tutarMatch.firma+'\n'+
-        'Önceki tarih: '+tutarMatch.tarih+'\n'+
-        'Yeni tarih: '+tarih+'\n'+
-        'Tutar: $'+tutarMatch.tutar.toFixed(2)+'\n\n'+
-        'Yine de eklemek istiyor musunuz?';
-      if(!confirm(uyari3))return;
-    }
-    // 3. Tam kopya (firma + tarih + tutar + tip)
+    var uyariMesaj='';
+    // 1. Birebir kopya (firma + tarih + tutar + tip)
     var kopya=invs.find(function(t){
       return t.firma===firma&&t.tarih===tarih&&Math.abs(t.tutar-tutar)<0.01&&t.tip===tip;
     });
     if(kopya){
-      var uyari2='⚠️ BİREBİR AYNI kayıt mevcut!\n\n'+
-        'Firma: '+kopya.firma+'\n'+
-        'Tarih: '+kopya.tarih+'\n'+
-        'Tutar: $'+kopya.tutar.toFixed(2)+'\n'+
-        'Tip: '+kopya.tip+'\n\n'+
-        'Yine de eklemek istiyor musunuz?';
-      if(!confirm(uyari2))return;
+      uyariMesaj='⚠️ BİREBİR AYNI kayıt mevcut!\n\nFirma: '+kopya.firma+'\nTarih: '+kopya.tarih+'\nTutar: $'+kopya.tutar.toFixed(2)+'\nTip: '+kopya.tip;
+    }
+    // 2. Fatura no tekrarı (farklı firmada bile)
+    if(!uyariMesaj&&fno){
+      var fnoMatch=invs.find(function(t){return t.fno&&t.fno.trim().toLowerCase()===fno.toLowerCase();});
+      if(fnoMatch) uyariMesaj='⚠️ Bu fatura numarası zaten kayıtlı!\n\nFirma: '+fnoMatch.firma+'\nTarih: '+fnoMatch.tarih+'\nTutar: $'+fnoMatch.tutar.toFixed(2);
+    }
+    // 3. Aynı firma + aynı tutar (tarih farklı)
+    if(!uyariMesaj){
+      var tutarMatch=invs.find(function(t){
+        return t.firma===firma&&Math.abs(t.tutar-tutar)<0.01&&t.tip===tip&&t.tarih!==tarih;
+      });
+      if(tutarMatch) uyariMesaj='⚠️ Bu firmaya aynı tutarda ödeme var!\n\nFirma: '+tutarMatch.firma+'\nÖnceki tarih: '+tutarMatch.tarih+'\nTutar: $'+tutarMatch.tutar.toFixed(2);
+    }
+    // Tek uyarı - sadece bir kez sor
+    if(uyariMesaj){
+      if(!confirm(uyariMesaj+'\n\nYine de eklemek istiyor musunuz?'))return;
     }
   }
   if(iEditId){var i=invs.findIndex(function(t){return t.id===iEditId;});if(i>=0)invs[i]={id:iEditId,tip:tip,tarih:tarih,tutar:tutar,firma:firma,fno:fno,dur:dur,kategori:kategori,kisi:kisi,aciklama:aciklama,locked:invs[i].locked||false};toast('Güncellendi');}else{invs.push({id:invNextId++,tip:tip,tarih:tarih,tutar:tutar,firma:firma,fno:fno,dur:dur,kategori:kategori,kisi:kisi,aciklama:aciklama,locked:false});
@@ -1698,6 +1688,18 @@ function closeDel(){document.getElementById('del-modal').classList.remove('on');
 
 function togInvDur(id){var t=invs.find(function(x){return x.id===id;});if(!t)return;if(t.locked){toast('Kilitli kayıtta değişiklik yapılamaz',true);return;}var cyc={BEK:'ODE',ODE:'ALI',ALI:'BEK'};t.dur=cyc[t.dur||'BEK']||'ODE';doSave();renderInv();toast({ODE:'✅ Ödendi',ALI:'🔵 Alındı',BEK:'🟡 Beklemede'}[t.dur]||'');}
 function toggleLock(id){var t=invs.find(function(x){return x.id===id;});if(!t)return;t.locked=!t.locked;doSave();renderInv();toast(t.locked?'🔒 Kilitlendi':'🔓 Kilit açıldı');}
+
+// Tek kayıt Supabase güncelleme
+async function sbPatch(t){
+  try{
+    await fetch(SB_URL+'/rest/v1/faturalar?id=eq.'+t.id,{
+      method:'PATCH',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({dur:t.dur,locked:t.locked,tutar:t.tutar,firma:t.firma,fno:t.fno,kategori:t.kategori,aciklama:t.aciklama,tarih:t.tarih,tip:t.tip})
+    });
+    setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'}));
+  }catch(e){setSS('error','Supabase hatasi');}
+}
 function isrt(k){if(iSortK===k)iSortAsc=!iSortAsc;else{iSortK=k;iSortAsc=true;}renderInv();}
 
 function renderInv(){
@@ -1805,12 +1807,38 @@ async function sbReq(path,opts){
   return r;
 }
 
+
+// Arka planda Supabase senkronizasyonu
+async function sbSync(){
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/faturalar?order=tarih.desc&limit=10000',{
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    });
+    if(!r.ok)return;
+    var sbData=await r.json();
+    if(!sbData||sbData.length===0)return;
+    // Supabase her zaman yetkili kaynak - localStorage'ı güncelle
+    invs=sbData;
+    invNextId=Math.max.apply(null,sbData.map(function(x){return x.id||0;}))+1;
+    try{localStorage.setItem('inv_data',JSON.stringify(invs));localStorage.setItem('inv_nid',String(invNextId));}catch(e){}
+    renderDash();renderInv();
+    setSS('ok',invs.length+' kayit (Supabase)');
+  }catch(e){}
+}
 async function saveToSupabase(){
   setSS('syncing');
   try{
-    var normalized=invs.map(function(e,idx){
-      return {
-        id:idx+1,
+    var zaman=new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'});
+    // Supabase'deki mevcut ID'leri çek
+    var existRes=await sbReq('faturalar?select=id&limit=10000',{method:'GET',prefer:''});
+    var existIds=new Set();
+    if(existRes.ok){var ed=await existRes.json();ed.forEach(function(r){existIds.add(Number(r.id));});}
+    
+    var toInsert=[];
+    var toUpdate=[];
+    invs.forEach(function(e){
+      var row={
+        id:Number(e.id),
         tip:e.tip||'DEBIT',
         tarih:e.tarih||'2026-01-01',
         tutar:parseFloat(e.tutar)||0,
@@ -1822,30 +1850,47 @@ async function saveToSupabase(){
         aciklama:(e.aciklama||'').toString(),
         locked:e.locked===true
       };
+      if(!row.id||isNaN(row.id))return; // ID yoksa atla
+      if(existIds.has(row.id))toUpdate.push(row);
+      else toInsert.push(row);
     });
-    var total=normalized.length;
-    setSS('syncing','Temizleniyor...');
-    // 1. Mevcut kayıt sayısını öğren
-    var countRes=await sbReq('faturalar?select=id&order=id.desc&limit=1',{method:'GET',prefer:''});
-    var maxSbId=0;
-    if(countRes.ok){
-      var cd=await countRes.json();
-      if(cd&&cd.length>0)maxSbId=cd[0].id||0;
-    }
-    // 2. Batch olarak sil (500'lük gruplar)
-    for(var d=1;d<=maxSbId;d+=500){
-      await sbReq('faturalar?id=gte.'+d+'&id=lt.'+(d+500),{method:'DELETE',prefer:''});
-    }
-    await new Promise(function(r){setTimeout(r,300);});
-    // 3. Temiz insert - 100'lük batch
-    for(var i=0;i<total;i+=100){
-      var batch=normalized.slice(i,i+100);
-      setSS('syncing','Kaydediliyor... '+Math.min(i+100,total)+'/'+total);
+    
+    // Yeni kayıtları ekle
+    for(var i=0;i<toInsert.length;i+=100){
+      var batch=toInsert.slice(i,i+100);
+      setSS('syncing','Ekleniyor... '+batch.length+' kayit');
       var r=await sbReq('faturalar',{method:'POST',prefer:'return=minimal',body:JSON.stringify(batch)});
-      if(!r.ok){var err=await r.text();throw new Error(err);}
+      if(!r.ok){var err=await r.text();throw new Error('INSERT:'+err);}
     }
-    setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'}));
+    
+    // Mevcut kayıtları güncelle (tek tek PATCH)
+    for(var j=0;j<toUpdate.length;j++){
+      var row=toUpdate[j];
+      setSS('syncing','Guncelleniyor... '+(j+1)+'/'+toUpdate.length);
+      var r2=await sbReq('faturalar?id=eq.'+row.id,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify(row)});
+      if(!r2.ok){var err2=await r2.text();throw new Error('PATCH:'+err2);}
+    }
+    
+    // Supabase'de olup bizde olmayan kayıtları sil
+    var ourIds=new Set(invs.map(function(e){return Number(e.id);}));
+    var toDelete=[...existIds].filter(function(id){return !ourIds.has(id);});
+    for(var k=0;k<toDelete.length;k+=100){
+      var ids=toDelete.slice(k,k+100).join(',');
+      await sbReq('faturalar?id=in.('+ids+')',{method:'DELETE',prefer:''});
+    }
+    
+    setSS('ok','Kaydedildi '+zaman);
   }catch(e){setSS('error',e.message);}
+}
+
+// Tek kayıt anında güncelle (durum/kilit değişimi için)
+async function sbPatchOne(e){
+  try{
+    var row={dur:e.dur,locked:e.locked,tutar:e.tutar,firma:e.firma,fno:e.fno,kategori:e.kategori,aciklama:e.aciklama,tarih:e.tarih,tip:e.tip};
+    var r=await sbReq('faturalar?id=eq.'+e.id,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify(row)});
+    if(r.ok)setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'}));
+    else setSS('error','Guncelleme hatasi');
+  }catch(ex){setSS('error',ex.message);}
 }
 
 async function loadFromSupabase(){
@@ -1857,50 +1902,6 @@ async function loadFromSupabase(){
   }catch(e){return null;}
 }
 
-function doSave(){
-  try{localStorage.setItem('inv_data',JSON.stringify(invs));localStorage.setItem('inv_nid',String(invNextId));localStorage.setItem('firms26',JSON.stringify(firms));}catch(e){}
-  if(saveTimer)clearTimeout(saveTimer);
-  saveTimer=setTimeout(saveToSupabase,2000);
-}
-
-async function initInvs(){
-  setSS('syncing','Yukleniyor...');
-  firms=JSON.parse(JSON.stringify(DEFAULT_FIRMS));
-  invs=DEFAULT_INV.slice();
-  invNextId=497;
-  renderDash();
-  setSS('ok',invs.length+' kayit (varsayilan)');
-  var sbData=await loadFromSupabase();
-  if(sbData&&sbData.length>0){
-    var sbIds=new Set(sbData.map(function(e){return e.id;}));
-    var extra=DEFAULT_INV.filter(function(e){return !sbIds.has(e.id);});
-    invs=sbData.concat(extra);
-    invNextId=Math.max(2483,Math.max.apply(null,invs.map(function(e){return e.id;}))+1);
-    try{localStorage.setItem('inv_data',JSON.stringify(invs));}catch(e){}
-    setSS('ok',invs.length+' kayit (Supabase)');
-    renderDash();
-  }else{
-    setSS('syncing','Supabase e yukleniyor...');
-    saveToSupabase();
-  }
-}
-
-function showBinId(){toast('Supabase kullaniliyor');}
-function connectBinId(){toast('Supabase kullaniliyor');}
-function cSave(){return Promise.resolve();}
-function cLoad(){return Promise.resolve(null);}
-
-function saveToFile(){
-  var s=document.documentElement.outerHTML;
-  var i1=s.indexOf('const DEFAULT_INV=['),i2=s.indexOf('];',i1)+2;
-  if(i1>=0)s=s.slice(0,i1)+'const DEFAULT_INV='+JSON.stringify(invs)+';'+s.slice(i2);
-  var f1=s.indexOf('const DEFAULT_FIRMS={'),f2=s.indexOf('};',f1)+3;
-  if(f1>=0)s=s.slice(0,f1)+'const DEFAULT_FIRMS='+JSON.stringify(firms)+';'+s.slice(f2);
-  s=s.replace(/var invNextId=\d+/,'var invNextId='+invNextId);
-  var b=new Blob([s],{type:'text/html;charset=utf-8'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='index.html';a.click();URL.revokeObjectURL(a.href);
-  toast('index.html indirildi');
-}
 // ═══ SUPABASE SYNC SONU ═══════════════════════════════════
 
 
