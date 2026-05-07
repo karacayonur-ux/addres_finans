@@ -1824,25 +1824,26 @@ async function saveToSupabase(){
       };
     });
     var total=normalized.length;
-    // UPSERT - sil yok, her kayıt kendi ID'siyle güncellenir/eklenir
+    setSS('syncing','Temizleniyor...');
+    // 1. Mevcut kayıt sayısını öğren
+    var countRes=await sbReq('faturalar?select=id&order=id.desc&limit=1',{method:'GET',prefer:''});
+    var maxSbId=0;
+    if(countRes.ok){
+      var cd=await countRes.json();
+      if(cd&&cd.length>0)maxSbId=cd[0].id||0;
+    }
+    // 2. Batch olarak sil (500'lük gruplar)
+    for(var d=1;d<=maxSbId;d+=500){
+      await sbReq('faturalar?id=gte.'+d+'&id=lt.'+(d+500),{method:'DELETE',prefer:''});
+    }
+    await new Promise(function(r){setTimeout(r,300);});
+    // 3. Temiz insert - 100'lük batch
     for(var i=0;i<total;i+=100){
       var batch=normalized.slice(i,i+100);
-      setSS('syncing','Kaydediliyor... '+(Math.min(i+100,total))+'/'+total);
-      var r=await fetch(SB_URL+'/rest/v1/faturalar',{
-        method:'POST',
-        headers:{
-          'apikey':SB_KEY,
-          'Authorization':'Bearer '+SB_KEY,
-          'Content-Type':'application/json',
-          'Prefer':'resolution=merge-duplicates,return=minimal'
-        },
-        body:JSON.stringify(batch)
-      });
+      setSS('syncing','Kaydediliyor... '+Math.min(i+100,total)+'/'+total);
+      var r=await sbReq('faturalar',{method:'POST',prefer:'return=minimal',body:JSON.stringify(batch)});
       if(!r.ok){var err=await r.text();throw new Error(err);}
     }
-    // Supabase'de fazla kayıt varsa sil (eski silinen kayıtlar)
-    var ourMax=total;
-    await sbReq('faturalar?id=gt.'+ourMax,{method:'DELETE',prefer:''});
     setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'}));
   }catch(e){setSS('error',e.message);}
 }
