@@ -1795,16 +1795,15 @@ async function saveToSupabase(){
   setSS('syncing');
   try{
     var normalized=invs.map(function(e,idx){return {id:idx+1,tip:e.tip||'DEBIT',tarih:e.tarih||'2026-01-01',tutar:parseFloat(e.tutar)||0,firma:(e.firma||'').toString(),fno:(e.fno||'').toString(),dur:e.dur||'BEK',kategori:(e.kategori||'').toString(),kisi:(e.kisi||'ISLETME').toString(),aciklama:(e.aciklama||'').toString(),locked:e.locked===true};});
-    // Tüm tabloyu temizle
-    var del1=await sbReq('faturalar?id=gte.1&id=lte.5000',{method:'DELETE',prefer:''});
-    var del2=await sbReq('faturalar?id=gt.5000',{method:'DELETE',prefer:''});
-    await new Promise(function(r){setTimeout(r,800);});
-    // Temiz insert - 50'lik küçük batch (daha güvenli)
-    for(var i=0;i<normalized.length;i+=50){
-      var batch=normalized.slice(i,i+50);
+    // Tüm tabloyu tek seferde sil
+    await sbReq('faturalar?id=gte.0',{method:'DELETE',prefer:''});
+    // 200'lük büyük batch ile insert - daha hızlı
+    var total=normalized.length;
+    for(var i=0;i<total;i+=200){
+      var batch=normalized.slice(i,i+200);
+      setSS('syncing','Kaydediliyor... '+(i+batch.length)+'/'+total);
       var r=await sbReq('faturalar',{method:'POST',prefer:'return=minimal',body:JSON.stringify(batch)});
       if(!r.ok)throw new Error(await r.text());
-      await new Promise(function(r){setTimeout(r,100);});
     }
     setSS('ok','Kaydedildi '+new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'}));
   }catch(e){setSS('error',e.message);}
