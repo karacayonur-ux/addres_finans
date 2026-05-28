@@ -1239,17 +1239,13 @@ var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI
 
 async function sbReq(path, opts){
   opts = opts || {};
-  var headers = {
-    'apikey': SB_KEY,
-    'Authorization': 'Bearer ' + SB_KEY,
-    'Content-Type': 'application/json',
-    'Prefer': opts.prefer !== undefined ? opts.prefer : 'return=minimal'
-  };
-  return fetch(SB_URL + '/rest/v1/' + path, {
-    method: opts.method || 'GET',
-    headers: headers,
-    body: opts.body
-  });
+  var method = opts.method || 'GET';
+  var headers = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+  if(method!=='GET'&&method!=='DELETE')headers['Content-Type']='application/json';
+  if(opts.prefer!==undefined&&opts.prefer!=='')headers['Prefer']=opts.prefer;
+  var fetchOpts = {method:method,headers:headers};
+  if(opts.body)fetchOpts.body=opts.body;
+  return fetch(SB_URL+'/rest/v1/'+path, fetchOpts);
 }
 
 async function sbPatchOne(row){
@@ -1620,6 +1616,15 @@ MN.forEach((m,i)=>{const o=document.createElement('option');o.value=i;o.textCont
   📡 İnternet bağlantısı yok — Uygulama offline modda çalışıyor. Tüm veriler ve işlevler aktif.
 </div>
 <script>
+function isrt(k){
+  if(sortK===k)sortAsc=!sortAsc;
+  else{sortK=k;sortAsc=true;}
+  // Hangi panel aktif?
+  var invPanel=document.getElementById('panel-inv');
+  if(invPanel&&invPanel.classList.contains('on'))renderInv();
+  else renderData();
+}
+
 
 // ═══ FATURALAR & CLOUD SYNC ═══════════════════════════════
 function renderInv(){renderData();}
