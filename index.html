@@ -1686,7 +1686,7 @@ function renderInv(){
         ' <span style="font-size:12px">'+(t.locked?'🔒':'')+'</span>'+
       '</td>'+
       '<td style="padding:8px 12px;white-space:nowrap">'+
-        '<button onclick="toggleLock('+t.id+')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px" title="Kilit">'+(t.locked?'🔒':'🔓')+'</button>'+
+        (!t.locked?'<button onclick="toggleLock('+t.id+')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px" title="Kilitle">🔓</button>':'<span style="font-size:13px;padding:2px 4px">🔒</span>')+
         (!t.locked?'<button onclick="openInvModal('+t.id+')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px">✏️</button>':'')+
         (!t.locked?'<button onclick="delInv('+t.id+')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;color:#f87171">✕</button>':'')+
       '</td>'+
@@ -1753,7 +1753,7 @@ async function initInvs(){
               invs=sbData;
               invNextId=Math.max.apply(null,sbData.map(function(e){return e.id||0;}))+1;
               try{localStorage.setItem('addr_master_inv',JSON.stringify(invs));}catch(e){}
-              setSS('ok',invs.length+' kayit (Supabase)');
+              setSS('ok',invs.length+' kayit (Supabase)');var sbEl=document.getElementById('sb-status');if(sbEl){sbEl.style.color='var(--check)';sbEl.textContent='🟢 '+invs.length+' kayit (Supabase)';};
               renderDash();
             }
           }).catch(function(){});
@@ -1772,7 +1772,7 @@ async function initInvs(){
         invs=sbData;
         invNextId=Math.max.apply(null,sbData.map(function(e){return e.id||0;}))+1;
         try{localStorage.setItem('addr_master_inv',JSON.stringify(invs));}catch(e){}
-        setSS('ok',invs.length+' kayit (Supabase)');
+        setSS('ok',invs.length+' kayit (Supabase)');var sbEl=document.getElementById('sb-status');if(sbEl){sbEl.style.color='var(--check)';sbEl.textContent='🟢 '+invs.length+' kayit (Supabase)';};
         renderDash();
         return;
       }
