@@ -1330,6 +1330,17 @@ const LBL={CHECK:'✓ CHECK',DEBIT:'💳 DEBİT',CREDIT:'🔴 KREDİ',FIXED:'�
 function toast(m,err=false){const t=$('toast');t.textContent=m;t.style.borderColor=err?'var(--red)':'var(--check)';t.style.color=err?'var(--red)':'var(--check)';t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2500);}
 
 
+// ─── Wrapper fonksiyonlar (Script 1 yüklenmeden önce çağrılabilir) ───
+function isrt(k){
+  if(typeof sortK!=='undefined'){
+    if(sortK===k)sortAsc=!sortAsc;
+    else{sortK=k;sortAsc=true;}
+  }
+  var invPanel=document.getElementById('panel-inv');
+  if(invPanel&&invPanel.classList.contains('on')&&typeof renderInv==='function')renderInv();
+  else if(typeof renderData==='function')renderData();
+}
+
 function go(id,el){
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
   document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('on');});
@@ -1514,6 +1525,7 @@ function renderInv(){
       '<td class="right" style="font-family:monospace;font-weight:600;color:'+(d==='ODE'?'var(--check)':CLR[t.tip]||'var(--text)')+';white-space:nowrap">'+fmt(t.tutar)+'</td>'+
       '<td style="white-space:nowrap"><button class="act-btn act-'+DC[d]+'" onclick="togInvDur('+t.id+')" style="font-size:10px;padding:2px 8px">'+DL[d]+'</button> '+lkIco+'</td>'+
       '<td style="white-space:nowrap">'+
+        '<button class="act-btn" onclick="toggleLock('+t.id+')" style="font-size:10px;padding:2px 6px" title="Kilit">'+( t.locked?'🔒':'🔓')+'</button> '+
         (!t.locked?'<button class="act-btn" onclick="openInvModal('+t.id+')" style="font-size:10px;padding:2px 6px">✏️</button> ':'') +
         (!t.locked?'<button class="act-btn" onclick="delInv('+t.id+')" style="font-size:10px;padding:2px 6px;color:var(--debit)">✕</button>':'')+
       '</td>'+
@@ -1627,7 +1639,60 @@ function isrt(k){
 
 
 // ═══ FATURALAR & CLOUD SYNC ═══════════════════════════════
-function renderInv(){renderData();}
+function renderInv(){
+  var GS=function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
+  var fmt2=function(v){return '$'+(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var totAll=invs.reduce(function(s,t){return s+(t.tutar||0);},0);
+  var bekAll=invs.filter(function(t){return t.dur==='BEK';});
+  var odeAll=invs.filter(function(t){return t.dur==='ODE';});
+  var aliAll=invs.filter(function(t){return t.dur==='ALI';});
+  GS('iv-tot',fmt2(totAll));GS('iv-tot-s',invs.length+' adet');
+  GS('iv-bek',fmt2(bekAll.reduce(function(s,t){return s+t.tutar;},0)));GS('iv-bek-s',bekAll.length+' adet');
+  GS('iv-ode',fmt2(odeAll.reduce(function(s,t){return s+t.tutar;},0)));GS('iv-ode-s',odeAll.length+' adet');
+  GS('iv-ali',fmt2(aliAll.reduce(function(s,t){return s+t.tutar;},0)));GS('iv-ali-s',aliAll.length+' adet');
+  GS('iv-lok',invs.filter(function(t){return t.locked;}).length+'');
+  var G=function(id){var el=document.getElementById(id);return el?el.value:'';};
+  var ftip=G('if-tip'),fay=G('if-ay'),fdur=G('if-dur'),q=G('if-q').toLowerCase().trim();
+  var fayNum=fay===''?-1:parseInt(fay,10);
+  var list=invs.filter(function(t){
+    if(ftip&&t.tip!==ftip)return false;
+    if(fayNum>=0){var p=(t.tarih||'').split('-');if(parseInt(p[1],10)-1!==fayNum)return false;}
+    if(fdur&&t.dur!==fdur)return false;
+    if(q){var hay=(t.firma||'').toLowerCase()+(t.fno||'').toLowerCase();if(!hay.includes(q))return false;}
+    return true;
+  });
+  list.sort(function(a,b){var va=a[sortK]||'',vb=b[sortK]||'';if(sortK==='tutar'){va=parseFloat(va)||0;vb=parseFloat(vb)||0;}if(va<vb)return sortAsc?-1:1;if(va>vb)return sortAsc?1:-1;return 0;});
+  var cntEl=document.getElementById('if-cnt');
+  if(cntEl)cntEl.textContent=list.length+' kayit · $'+(list.reduce(function(s,t){return s+t.tutar;},0)).toLocaleString('en-US',{minimumFractionDigits:2});
+  var tbody=document.getElementById('inv-tbody');
+  if(!tbody)return;
+  if(!list.length){tbody.innerHTML='<tr><td colspan="9"><div style="text-align:center;padding:40px;color:#666">📭 Kayit bulunamadi</div></td></tr>';return;}
+  var DL={BEK:'Beklemede',ODE:'Odendi',ALI:'Alindi'};
+  var DC={BEK:'bek',ODE:'ode',ALI:'ali'};
+  var DLTR={BEK:'🟡 Beklemede',ODE:'✅ Ödendi',ALI:'🔵 Alındı'};
+  var DCLR={BEK:'#f5c842',ODE:'#4ade80',ALI:'#60a5fa'};
+  tbody.innerHTML=list.map(function(t){
+    var d=t.dur||'BEK';
+    return '<tr style="border-bottom:1px solid #1e1e2e">'+
+      '<td style="font-family:monospace;font-size:11px;white-space:nowrap;padding:8px 12px">'+t.tarih.split('-').reverse().join('/')+'</td>'+
+      '<td style="padding:8px 12px"><span class="tag '+TC[t.tip]+'">'+LBL[t.tip]+'</span></td>'+
+      '<td style="font-weight:600;padding:8px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+t.firma+'</td>'+
+      '<td style="color:var(--text2);font-size:11px;padding:8px 12px">'+(t.fno||'—')+'</td>'+
+      '<td style="color:var(--text2);font-size:11px;padding:8px 12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(t.kategori||'—')+'</td>'+
+      '<td style="color:var(--text2);font-size:11px;padding:8px 12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(t.aciklama||'—')+'</td>'+
+      '<td style="text-align:right;font-family:monospace;font-weight:700;color:'+(d==='ODE'?'var(--check)':CLR[t.tip]||'var(--text1)')+';padding:8px 12px;white-space:nowrap">'+fmt(t.tutar)+'</td>'+
+      '<td style="padding:8px 12px;white-space:nowrap">'+
+        '<button onclick="togInvDur('+t.id+')" style="font-size:10px;padding:3px 10px;cursor:pointer;border-radius:12px;border:1px solid '+DCLR[d]+';background:transparent;color:'+DCLR[d]+';font-weight:600">'+DLTR[d]+'</button>'+
+        ' <span style="font-size:12px">'+(t.locked?'🔒':'')+'</span>'+
+      '</td>'+
+      '<td style="padding:8px 12px;white-space:nowrap">'+
+        '<button onclick="toggleLock('+t.id+')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px" title="Kilit">'+(t.locked?'🔒':'🔓')+'</button>'+
+        (!t.locked?'<button onclick="openInvModal('+t.id+')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px">✏️</button>':'')+
+        (!t.locked?'<button onclick="delInv('+t.id+')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;color:#f87171">✕</button>':'')+
+      '</td>'+
+    '</tr>';
+  }).join('');
+}
 var invs=[],invNextId=3000,iSortK='tarih',iSortAsc=false,iEditId=null;
 var JKEY='$2a$10$s8BEyLXGqsvg7I9.q0E5mO3bo36dkJ7IOB5DRnM5j8H7Cb.4aS8mW',JBASE='https://api.jsonbin.io/v3/b';
 
@@ -1670,8 +1735,8 @@ function doSave(){
 async function initInvs(){
   firms=JSON.parse(JSON.stringify(DEFAULT_FIRMS));
   localStorage.setItem('addr_master_owner','the_address_master_2026');
-  
-  // 1. Önce localStorage'dan hızlı yükle (anında görünsün)
+
+  // 1. localStorage'dan yükle (her zaman çalışır)
   try{
     var loc=localStorage.getItem('addr_master_inv');
     if(loc){
@@ -1679,43 +1744,45 @@ async function initInvs(){
       if(li&&li.length>0){
         invs=li;
         invNextId=Math.max.apply(null,li.map(function(e){return e.id||0;}))+1;
-        setSS('ok',invs.length+' kayit (yerel)');
+        setSS('ok',invs.length+' kayit');
         renderDash();
+        // Arka planda Supabase'den kontrol et (sadece https'te çalışır)
+        if(location.protocol==='https:'){
+          sbLoadAll().then(function(sbData){
+            if(sbData&&sbData.length>invs.length){
+              invs=sbData;
+              invNextId=Math.max.apply(null,sbData.map(function(e){return e.id||0;}))+1;
+              try{localStorage.setItem('addr_master_inv',JSON.stringify(invs));}catch(e){}
+              setSS('ok',invs.length+' kayit (Supabase)');
+              renderDash();
+            }
+          }).catch(function(){});
+        }
+        return;
       }
     }
   }catch(e){}
-  
-  // 2. Supabase'den yükle (asıl kaynak)
-  try{
-    setSS('syncing','Supabase yükleniyor...');
-    var sbData = await sbLoadAll();
-    if(sbData && sbData.length > 0){
-      invs = sbData;
-      invNextId = Math.max.apply(null, sbData.map(function(e){return e.id||0;})) + 1;
-      // localStorage'a yedekle
-      try{
-        localStorage.setItem('addr_master_inv', JSON.stringify(invs));
-        localStorage.setItem('addr_master_nid', String(invNextId));
-      }catch(e){}
-      setSS('ok', invs.length+' kayit (Supabase)');
-      renderDash();
-      return;
-    }
-  }catch(e){ console.log('Supabase yükleme hatası:', e); }
-  
-  // 3. Supabase boşsa veya hata verdiyse localStorage yeterli
-  if(invs.length > 0){
-    setSS('ok', invs.length+' kayit (yerel)');
-    return;
+
+  // 2. Supabase'den yükle (sadece https'te)
+  if(location.protocol==='https:'){
+    try{
+      setSS('syncing','Yukleniyor...');
+      var sbData=await sbLoadAll();
+      if(sbData&&sbData.length>0){
+        invs=sbData;
+        invNextId=Math.max.apply(null,sbData.map(function(e){return e.id||0;}))+1;
+        try{localStorage.setItem('addr_master_inv',JSON.stringify(invs));}catch(e){}
+        setSS('ok',invs.length+' kayit (Supabase)');
+        renderDash();
+        return;
+      }
+    }catch(e){}
   }
-  
-  // 4. Son çare: DEFAULT_INV
+
+  // 3. DEFAULT_INV
   invs=DEFAULT_INV.slice();
   invNextId=Math.max.apply(null,invs.map(function(e){return e.id||0;}))+1;
-  try{
-    localStorage.setItem('addr_master_inv',JSON.stringify(invs));
-    localStorage.setItem('addr_master_nid',String(invNextId));
-  }catch(e){}
+  try{localStorage.setItem('addr_master_inv',JSON.stringify(invs));}catch(e){}
   setSS('ok',invs.length+' kayit');
   renderDash();
 }
